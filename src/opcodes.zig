@@ -1,10 +1,10 @@
 const OpCode = enum(u8) {
     BR = 0,   // branch
-    ADD,      // add
+    ADD = 0b0001,      // add
     LD,       // load
     ST,       // store
     JSR,      // jump register
-    AND,      // bitwise and
+    AND = 0b0101,      // bitwise and
     LDR,      // load register
     STR,      // store register
     RTI,      // unused
