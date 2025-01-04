@@ -98,18 +98,40 @@ pub fn main() !void {
             },
             OP.OP_NOT => {
                 // NOT
+                const r0 = (instr >> 9) & 0x7;
+                const r1 = (instr >> 6) & 0x7;
+
+                reg[r0] = !reg[r1];
+                updateFlags(r0);
             },
             OP.OP_BR => {
-                // BR
+                const cond_flag = (instr >> 9) & 0x7;
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                const cond = (cond_flag & reg[Register.R_COND]);
+                if (cond) {
+                    reg[Register.R_PC] += pc_offset;
+                }
             },
             OP.OP_JMP => {
-                // JMP
+                const r1 = (instr >> 6) & 0x7;
+                reg[Register.R_PC] = reg[r1];
             },
             OP.OP_JSR => {
-                // JSR
+                const long_flag = (instr >> 11) & 1;
+                reg[Register.R_R7] = reg[Register.R_PC];
+                if (long_flag) {
+                    const pc_offset = signExtend(instr & 0x7FF, 11);
+                    reg[Register.R_PC] += pc_offset;
+                } else {
+                    const r1 = (instr >> 6) & 0x7;
+                    reg[Register.R_PC] = reg[r1];
+                }
             },
             OP.OP_LD => {
-                // LD
+                const r0 = (instr >> 9) & 0x7;
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                reg[r0] = mem_read(reg[Register.R_PC] + pc_offset);
+                updateFlags(r0);
             },
             OP.OP_LDI => {
                 const r0 = (instr >> 9) & 0x7;
@@ -119,22 +141,37 @@ pub fn main() !void {
                 updateFlags(r0);
             },
             OP.OP_LDR => {
-                // LDR
+                const r0 = (instr >> 9) & 0x7;
+                const r1 = (instr >> 6) & 0x7;
+                const offset = signExtend(instr & 0x3F, 6);
+                reg[r0] = mem_read(reg[r1] + offset);
+                updateFlags(r0);
             },
             OP.OP_LEA => {
-                // LEA
+                const r0 = (instr >> 9) & 0x7;
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                reg[r0] = reg[Register.R_PC] + pc_offset;
+                updateFlags(r0);
             },
             OP.OP_ST => {
-                // ST
+                const r0 = (instr >> 9) & 0x7;
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                mem_write(reg[Register.R_PC] + pc_offset, reg[r0]);
             },
             OP.OP_STI => {
-                // STI
+                const r0 = (instr >> 9) & 0x7;
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                const effective_addr = mem_read(reg[Register.R_PC] + pc_offset);
+                mem_write(effective_addr, reg[r0]);
             },
             OP.OP_STR => {
-                // STR
+                const r0 = (instr >> 9) & 0x7;
+                const r1 = (instr >> 6) & 0x7;
+                const offset = signExtend(instr & 0x3F, 6);
+                mem_write(reg[r1] + offset, reg[r0]);
             },
             OP.OP_TRAP => {
-                // TRAP
+                
             },
             else => {
                 break;
