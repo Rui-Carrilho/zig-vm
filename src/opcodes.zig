@@ -1,18 +1,19 @@
 const OpCode = enum(u8) {
     BR = 0,   // branch
-    ADD = 0b0001,      // add
-    LD,       // load
-    ST,       // store
-    JSR,      // jump register
-    AND = 0b0101,      // bitwise and
-    LDR,      // load register
-    STR,      // store register
-    RTI,      // unused
-    NOT,      // bitwise not
-    LDI,      // load indirect
-    STI,      // store indirect
-    JMP,      // jump
-    RES,      // reserved (unused)
-    LEA,      // load effective address
-    TRAP,     // execute trap
+    ADD = 0x1,      // add
+    LD = 0x2,       // load
+    ST = 0x3,       // store
+    JSR = 0x4,      // jump register
+    AND = 0x5,      // bitwise and
+    LDR = 0x6,      // load register
+    STR = 0x7,      // store register
+    RTI = 0x8,      // unused
+    NOT = 0x9,      // bitwise not
+    LDI = 0xA,      // load indirect
+    STI = 0xB,      // store indirect
+    JMP = 0xC,      // jump
+    RES = 0xD,      // reserved (unused)
+    LEA = 0xE,      // load effective address
+    TRAP = 0xF,     // execute trap
+    test = 0x321
 };

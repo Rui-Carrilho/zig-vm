@@ -2,6 +2,7 @@ const std = @import("std");
 const registers = @import("registers.zig");
 const opcodes = @import("opcodes.zig");
 const flags = @import("flags.zig");
+const traps = @import("traps.zig");
 
 // No need to bother with headers in Zig
 const MEMORY_MAX = 1 << 16;
@@ -13,6 +14,7 @@ const Register = registers.Register;
 const reg = registers.reg;
 const OP = opcodes.OpCode;
 const FL = flags.Flags;
+const trap = traps.TrapCodes;
 
 fn signExtend(x: u16, bit_count: u16) u16 {
     // Check if the highest bit in the bit_count range is set (sign bit)
@@ -171,7 +173,53 @@ pub fn main() !void {
                 mem_write(reg[r1] + offset, reg[r0]);
             },
             OP.OP_TRAP => {
-                
+                reg[Register.R_R7] = reg[Register.R_PC];
+                const trap_vector = instr & 0xFF;
+                switch (trap_vector) {
+                    trap.GETC => {
+                        reg[Register.R_R0] = std.io.getchar();
+                    },
+                    trap.OUT => {
+                        std.io.putchar(@intCast(u8, reg[Register.R_R0]));
+                    },
+                    trap.PUTS => {
+                        var c: [*]u16 = @ptrCast(memory + reg[Register.R_R0]);
+                        while (c[0] != 0) : (c += 1) {
+                            const char_value = @truncate(u8, c[0]);
+                            std.debug.print("{c}", .{char_value});
+                        }
+
+                        //gpt4 output
+                        // const addr = reg[Register.R_R0];
+                        // while (memory[addr] != 0) {
+                        //     std.io.putchar(@intCast(u8, memory[addr]));
+                        //     addr += 1;
+                        // }
+                    },
+                    trap.IN => {
+                        std.io.putchar(0x3);
+                        reg[Register.R_R0] = std.io.getchar();
+                    },
+                    trap.PUTSP => {
+                        let addr = reg[Register.R_R0];
+                        while (memory[addr] != 0) {
+                            const c = memory[addr] & 0xFF;
+                            std.io.putchar(@intCast(u8, c));
+                            const c2 = memory[addr] >> 8;
+                            if (c2 != 0) {
+                                std.io.putchar(@intCast(u8, c2));
+                            }
+                            addr += 1;
+                        }
+                    },
+                    trap.HALT => {
+                        std.debug.print("HALT\n", .{});
+                        running = false;
+                    },
+                    else => {
+                        std.debug.print("unhandled trap vector\n", .{});
+                    },
+                }
             },
             else => {
                 break;
