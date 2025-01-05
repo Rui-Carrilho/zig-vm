@@ -177,10 +177,13 @@ pub fn main() !void {
                 const trap_vector = instr & 0xFF;
                 switch (trap_vector) {
                     trap.GETC => {
-                        reg[Register.R_R0] = std.io.getchar();
+                        reg[Register.R_R0] = try std.io.getStdIn().reader().readByte(); 
+                        updateFlags(Register.R_R0);
                     },
                     trap.OUT => {
-                        std.io.putchar(@intCast(u8, reg[Register.R_R0]));
+                        const output = @truncate(u8, reg[Register.R_R0]);
+                        std.debug.print("{c}", .{output});
+                        try std.io.getStdOut().writer().flush();
                     },
                     trap.PUTS => {
                         var c: [*]u16 = @ptrCast(memory + reg[Register.R_R0]);
@@ -188,17 +191,16 @@ pub fn main() !void {
                             const char_value = @truncate(u8, c[0]);
                             std.debug.print("{c}", .{char_value});
                         }
-
-                        //gpt4 output
-                        // const addr = reg[Register.R_R0];
-                        // while (memory[addr] != 0) {
-                        //     std.io.putchar(@intCast(u8, memory[addr]));
-                        //     addr += 1;
-                        // }
+                        try std.io.getStdOut().writer().flush();
                     },
                     trap.IN => {
-                        std.io.putchar(0x3);
-                        reg[Register.R_R0] = std.io.getchar();
+                        std.debug.print("Type your character: ", .{});
+                        const c = try std.io.getStdIn().reader().readByte();
+                        std.debug.print("character: {c}", .{char});
+                        try std.io.getStdOut().writer().flush();
+                        reg[Register.R_R0] = char;
+                        updateFlags(Register.R_R0);
+                        
                     },
                     trap.PUTSP => {
                         let addr = reg[Register.R_R0];
