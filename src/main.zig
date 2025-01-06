@@ -35,6 +35,23 @@ fn updateFlags(r: u16) void {
     }
 }
 
+fn readImageFile(file: [_]u16) {
+    var origin: u16 = undefined;
+    
+    const image_file = try std.fs.cwd().openFile(file, .{});
+    defer image_file.close();
+    
+    const origin_read = try image_file.reader().readInt(u16);
+    origin = swap16(origin_read);
+
+
+
+}
+
+fn swap16(x: u16) u16 {
+    return (x << 8) | (x >> 8);
+}
+
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
@@ -177,7 +194,7 @@ pub fn main() !void {
                 const trap_vector = instr & 0xFF;
                 switch (trap_vector) {
                     trap.GETC => {
-                        reg[Register.R_R0] = try std.io.getStdIn().reader().readByte(); 
+                        reg[Register.R_R0] = try std.io.getStdIn().reader().readByte();
                         updateFlags(Register.R_R0);
                     },
                     trap.OUT => {
@@ -200,22 +217,22 @@ pub fn main() !void {
                         try std.io.getStdOut().writer().flush();
                         reg[Register.R_R0] = char;
                         updateFlags(Register.R_R0);
-                        
                     },
                     trap.PUTSP => {
-                        let addr = reg[Register.R_R0];
-                        while (memory[addr] != 0) {
-                            const c = memory[addr] & 0xFF;
-                            std.io.putchar(@intCast(u8, c));
-                            const c2 = memory[addr] >> 8;
-                            if (c2 != 0) {
-                                std.io.putchar(@intCast(u8, c2));
+                        var c: [*]u16 = @ptrCast(memory + reg[Register.R_R0]);
+                        while (c[0] != 0) : (c += 1) {
+                            const first_part = @truncate(u8, c[0] & 0xFF);
+                            std.debug.print("{c}", .{first_part});
+                            const second_part = @truncate(u8, c >> 8);
+                            if (second_part != 0) {
+                                std.debug.print("{c}", .{second_part});
                             }
-                            addr += 1;
                         }
+                        try std.io.getStdOut().writer().flush();
                     },
                     trap.HALT => {
-                        std.debug.print("HALT\n", .{});
+                        std.debug.print("HALTING\n", .{});
+                        try std.io.getStdOut().writer().flush();
                         running = false;
                     },
                     else => {
