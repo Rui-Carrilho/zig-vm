@@ -35,17 +35,35 @@ fn updateFlags(r: u16) void {
     }
 }
 
-fn readImageFile(file: [_]u16) {
+pub fn readImageFile(file: std.fs.File) !void {
+    // Read the origin value
     var origin: u16 = undefined;
+    const origin_bytes = try file.read(std.mem.asBytes(&origin));
+    if (origin_bytes != @sizeOf(u16)) return error.InvalidRead;
     
-    const image_file = try std.fs.cwd().openFile(file, .{});
-    defer image_file.close();
+    // Swap to correct endianness
+    origin = swap16(origin);
     
-    const origin_read = try image_file.reader().readInt(u16);
-    origin = swap16(origin_read);
+    // Calculate maximum number of u16 values we can read
+    const max_read = MEMORY_MAX - origin;
+    
+    // Read directly into memory slice starting at origin
+    var dest_slice = memory[origin..];
+    const items_read = try file.read(std.mem.sliceAsBytes(dest_slice));
+    const words_read = items_read / @sizeOf(u16);
+    
+    // Swap endianness for each read word
+    var i: usize = 0;
+    while (i < words_read) : (i += 1) {
+        dest_slice[i] = @byteSwap(dest_slice[i]);
+    }
+}
 
+fn readImage(image_path: []const u8) !void {
+    const file = try std.fs.cwd().openFile(image_path, .{});
+    defer file.close();
 
-
+    try readImageFile(file);
 }
 
 fn swap16(x: u16) u16 {
