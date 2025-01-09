@@ -3,6 +3,7 @@ const registers = @import("registers.zig");
 const opcodes = @import("opcodes.zig");
 const flags = @import("flags.zig");
 const traps = @import("traps.zig");
+const memoryRegisters = @import("memory_registers.zig");
 
 // No need to bother with headers in Zig
 const MEMORY_MAX = 1 << 16;
@@ -15,6 +16,7 @@ const reg = registers.reg;
 const OP = opcodes.OpCode;
 const FL = flags.Flags;
 const trap = traps.TrapCodes;
+const MR = memoryRegisters.MemoryRegisters;
 
 fn signExtend(x: u16, bit_count: u16) u16 {
     // Check if the highest bit in the bit_count range is set (sign bit)
@@ -68,6 +70,10 @@ fn readImage(image_path: []const u8) !void {
 
 fn swap16(x: u16) u16 {
     return (x << 8) | (x >> 8);
+}
+
+fn memWrite(address: u16, val: u16) !void {
+    memory[address] = val;
 }
 
 pub fn main() !void {
