@@ -82,17 +82,17 @@ fn memRead(address: u16) u16 {
             memory[MR.MR_KBSR] = (1 << 15);
             // Read a single character from stdin
             if (std.io.getStdIn().reader().readByte()) |char| {
-                memory[MR_KBDR] = char;
+                memory[MR.MR_KBDR] = char;
             } else |_| {
                 // Handle error by clearing the keyboard status
-                memory[MR_KBSR] = 0;
+                memory[MR.MR_KBSR] = 0;
             }
         }
     }
 }
 
 fn checkKey() bool {
-    
+
 }
 
 pub fn main() !void {
