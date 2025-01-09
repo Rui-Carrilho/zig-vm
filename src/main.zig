@@ -42,18 +42,18 @@ pub fn readImageFile(file: std.fs.File) !void {
     var origin: u16 = undefined;
     const origin_bytes = try file.read(std.mem.asBytes(&origin));
     if (origin_bytes != @sizeOf(u16)) return error.InvalidRead;
-    
+
     // Swap to correct endianness
     origin = swap16(origin);
-    
+
     // Calculate maximum number of u16 values we can read
     const max_read = MEMORY_MAX - origin;
-    
+
     // Read directly into memory slice starting at origin
     var dest_slice = memory[origin..];
     const items_read = try file.read(std.mem.sliceAsBytes(dest_slice));
     const words_read = items_read / @sizeOf(u16);
-    
+
     // Swap endianness for each read word
     var i: usize = 0;
     while (i < words_read) : (i += 1) {
@@ -74,6 +74,25 @@ fn swap16(x: u16) u16 {
 
 fn memWrite(address: u16, val: u16) !void {
     memory[address] = val;
+}
+
+fn memRead(address: u16) u16 {
+    if (address == MR.MR_KBSR) {
+        if (checkKey()) {
+            memory[MR.MR_KBSR] = (1 << 15);
+            // Read a single character from stdin
+            if (std.io.getStdIn().reader().readByte()) |char| {
+                memory[MR_KBDR] = char;
+            } else |_| {
+                // Handle error by clearing the keyboard status
+                memory[MR_KBSR] = 0;
+            }
+        }
+    }
+}
+
+fn checkKey() bool {
+    
 }
 
 pub fn main() !void {
