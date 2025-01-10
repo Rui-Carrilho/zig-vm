@@ -5,6 +5,16 @@ const flags = @import("flags.zig");
 const traps = @import("traps.zig");
 const memoryRegisters = @import("memory_registers.zig");
 
+//Windows specific stuff declared here
+const windows = std.os.windows;
+const HANDLE = windows.HANDLE;
+const DWORD = windows.DWORD;
+const INVALID_HANDLE_VALUE = windows.INVALID_HANDLE_VALUE;
+const kernel32 = windows.kernel32;
+
+const ENABLE_ECHO_INPUT = windows.ENABLE_ECHO_INPUT;
+const ENABLE_LINE_INPUT = windows.ENABLE_LINE_INPUT;
+
 // No need to bother with headers in Zig
 const MEMORY_MAX = 1 << 16;
 var memory: [MEMORY_MAX]u16 = undefined;
@@ -91,7 +101,11 @@ fn memRead(address: u16) u16 {
     }
 }
 
-fn checkKey() bool {
+fn disableInputBuffering() void {
+
+}
+
+fn checkKey() u16 {
 
 }
 
