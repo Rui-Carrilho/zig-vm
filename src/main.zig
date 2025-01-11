@@ -19,6 +19,10 @@ const ENABLE_LINE_INPUT = windows.ENABLE_LINE_INPUT;
 const MEMORY_MAX = 1 << 16;
 var memory: [MEMORY_MAX]u16 = undefined;
 
+var hStdin: HANDLE = INVALID_HANDLE_VALUE;
+var fdwOldMode: DWORD = undefined;
+var fdwMode: DWORD = undefined;
+
 //extremely easy to import bits of code in Zig,
 //so we can compartmentize our codebase and make this part less crowded
 const Register = registers.Register;
@@ -74,7 +78,6 @@ pub fn readImageFile(file: std.fs.File) !void {
 fn readImage(image_path: []const u8) !void {
     const file = try std.fs.cwd().openFile(image_path, .{});
     defer file.close();
-
     try readImageFile(file);
 }
 
@@ -102,7 +105,26 @@ fn memRead(address: u16) u16 {
 }
 
 fn disableInputBuffering() void {
+    hStdin = kernel32.GetStdHandle(windows.STD_INPUT_HANDLE);
+    if (hStdin == INVALID_HANDLE_VALUE) {
+        return error.GetStdHandleFailed;
+    }
 
+    if (kernel32.GetConsoleMode(hStdin, &fdwOldMode) == 0) {
+        return error.GetConsoleModeFailed;
+    }
+
+    fdwMode = fdwOldMode;
+    fdwMode ^= ENABLE_ECHO_INPUT;
+    fdwMode ^= ENABLE_LINE_INPUT;
+
+    if (kernel32.SetConsoleMode(hStdin, fdwMode) == 0) {
+        return error.SetConsoleModeFailed;
+    }
+
+    if (kernel32.FlushConsoleInputBuffer(hStdin) == 0) {
+        return error.FlushConsoleFailed;
+    }
 }
 
 fn checkKey() u16 {
