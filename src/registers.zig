@@ -1,4 +1,4 @@
-const Register = enum(u16) {
+pub const Register = enum(usize) {
     R_R0 = 0,
     R_R1,
     R_R2,
@@ -12,4 +12,4 @@ const Register = enum(u16) {
     R_COUNT,
 };
 
-var reg: [Register.R_COUNT]u16 = undefined;
+pub var reg: [@intFromEnum(Register.R_COUNT)]u16 = undefined;

@@ -1,5 +1,5 @@
-const OpCode = enum(u8) {
-    BR = 0,   // branch
+pub const OpCode = enum(u8) {
+    BR = 0x0,   // branch
     ADD = 0x1,      // add
     LD = 0x2,       // load
     ST = 0x3,       // store
@@ -15,5 +15,4 @@ const OpCode = enum(u8) {
     RES = 0xD,      // reserved (unused)
     LEA = 0xE,      // load effective address
     TRAP = 0xF,     // execute trap
-    test = 0x321
 };

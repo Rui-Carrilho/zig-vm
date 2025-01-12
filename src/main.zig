@@ -2,7 +2,7 @@ const std = @import("std");
 const registers = @import("registers.zig");
 const opcodes = @import("opcodes.zig");
 const flags = @import("flags.zig");
-const traps = @import("traps.zig");
+const traps = @import("trap_codes.zig");
 const memoryRegisters = @import("memory_registers.zig");
 
 //Windows specific stuff declared here
@@ -12,14 +12,17 @@ const DWORD = windows.DWORD;
 const INVALID_HANDLE_VALUE = windows.INVALID_HANDLE_VALUE;
 const kernel32 = windows.kernel32;
 
-const ENABLE_ECHO_INPUT = windows.ENABLE_ECHO_INPUT;
-const ENABLE_LINE_INPUT = windows.ENABLE_LINE_INPUT;
+// Import Windows API functions that aren't in the standard bindings
+pub extern "kernel32" fn FlushConsoleInputBuffer(hConsoleInput: windows.HANDLE) callconv(windows.WINAPI) windows.BOOL;
+
+const ENABLE_ECHO_INPUT = 0x0004;
+const ENABLE_LINE_INPUT = 0x0002;
 
 // No need to bother with headers in Zig
 const MEMORY_MAX = 1 << 16;
 var memory: [MEMORY_MAX]u16 = undefined;
 
-var hStdin: HANDLE = INVALID_HANDLE_VALUE;
+var hStdin: ?HANDLE = INVALID_HANDLE_VALUE;
 var fdwOldMode: DWORD = undefined;
 var fdwMode: DWORD = undefined;
 
@@ -32,6 +35,28 @@ const FL = flags.Flags;
 const trap = traps.TrapCodes;
 const MR = memoryRegisters.MemoryRegisters;
 
+//for signal handling
+const c = @cImport({
+    @cInclude("signal.h");
+});
+
+//signal handler type
+const SignalHandler = fn (c_int) callconv(.C) void;
+
+//signal handler
+export fn handleInterrupt(sig: c_int) callconv(.C) void {
+    try restoreInputBuffering();
+
+    std.debug.print("\n", .{});
+
+    std.process.exit(sig);
+}
+
+// to set up signal handling
+fn setupSignalHandler() void {
+    _ = c.signal(c.SIGINT, handleInterrupt);
+}
+
 fn signExtend(x: u16, bit_count: u16) u16 {
     // Check if the highest bit in the bit_count range is set (sign bit)
     if (((x >> @intCast(bit_count - 1)) & 1) == 1) {
@@ -42,12 +67,12 @@ fn signExtend(x: u16, bit_count: u16) u16 {
 }
 
 fn updateFlags(r: u16) void {
-    if (reg[r] == 0) {
-        reg[Register.R_COND] = FL.FL_ZRO;
-    } else if ((reg[r] >> 15) == 1) { // Check leftmost bit for negative
-        reg[Register.R_COND] = FL.FL_NEG;
+    if (registers.reg[r] == 0) {
+        registers.reg[Register.R_COND] = FL.FL_ZRO;
+    } else if ((registers.reg[r] >> 15) == 1) { // Check leftmost bit for negative
+        registers.reg[Register.R_COND] = FL.FL_NEG;
     } else {
-        reg[Register.R_COND] = FL.FL_POS;
+        registers.reg[Register.R_COND] = FL.FL_POS;
     }
 }
 
@@ -60,8 +85,9 @@ pub fn readImageFile(file: std.fs.File) !void {
     // Swap to correct endianness
     origin = swap16(origin);
 
+    //on second thought, maybe this is unnecessary in this implementation, since we don't really use fread
     // Calculate maximum number of u16 values we can read
-    const max_read = MEMORY_MAX - origin;
+    //const max_read = MEMORY_MAX - origin;
 
     // Read directly into memory slice starting at origin
     var dest_slice = memory[origin..];
@@ -104,34 +130,59 @@ fn memRead(address: u16) u16 {
     }
 }
 
-fn disableInputBuffering() void {
+pub fn disableInputBuffering() !void {
+    // Get handle and ensure it's valid
     hStdin = kernel32.GetStdHandle(windows.STD_INPUT_HANDLE);
-    if (hStdin == INVALID_HANDLE_VALUE) {
+    if (hStdin) |handle| {
+        // Save old mode
+        if (kernel32.GetConsoleMode(handle, &fdwOldMode) == 0) {
+            return error.GetConsoleModeFailed;
+        }
+
+        // Calculate new mode
+        fdwMode = fdwOldMode;
+        fdwMode ^= ENABLE_ECHO_INPUT; // no input echo
+        fdwMode ^= ENABLE_LINE_INPUT; // return when one or more characters available
+
+        // Set new mode
+        if (kernel32.SetConsoleMode(handle, fdwMode) == 0) {
+            return error.SetConsoleModeFailed;
+        }
+
+        // Clear buffer
+        if (FlushConsoleInputBuffer(handle) == 0) {
+            return error.FlushConsoleFailed;
+        }
+    } else {
         return error.GetStdHandleFailed;
-    }
-
-    if (kernel32.GetConsoleMode(hStdin, &fdwOldMode) == 0) {
-        return error.GetConsoleModeFailed;
-    }
-
-    fdwMode = fdwOldMode;
-    fdwMode ^= ENABLE_ECHO_INPUT;
-    fdwMode ^= ENABLE_LINE_INPUT;
-
-    if (kernel32.SetConsoleMode(hStdin, fdwMode) == 0) {
-        return error.SetConsoleModeFailed;
-    }
-
-    if (kernel32.FlushConsoleInputBuffer(hStdin) == 0) {
-        return error.FlushConsoleFailed;
     }
 }
 
-fn checkKey() u16 {
+fn restoreInputBuffering() !void {
+    if (kernel32.SetConsoleMode(hStdin, fdwOldMode) == 0) {
+        return error.SetConsoleModeFailed;
+    }
+}
 
+fn checkKey() bool {
+    const wait_result = kernel32.WaitForSingleObject(hStdin, 1000);
+    if (wait_result == windows.WAIT_OBJECT_0) {
+        var numberOfEvents: DWORD = undefined;
+        var numEventsRead: DWORD = undefined;
+        var buffer: [1]windows.INPUT_RECORD = undefined;
+
+        _ = kernel32.GetNumberofConsoleInputEvents(hStdin, &numberOfEvents);
+        if (numberOfEvents > 0) {
+            if (kernel32.PeekConsoleInputA(hStdin, &buffer, 1, &numEventsRead) != 0) {
+                return buffer[0].event.KeyEvent.bKeyDown != 0;
+            }
+        }
+    }
 }
 
 pub fn main() !void {
+    setupSignalHandler();
+    try disableInputBuffering();
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
 
@@ -141,22 +192,22 @@ pub fn main() !void {
     }
 
     for (args[1..]) |arg| {
-        if (!read_image(arg)) {
-            std.debug.print("failed to load image: {s}\n", .{arg});
+        readImage(arg) catch |err| {
+            std.debug.print("Failed to read image: {}\n", .{err});
             return;
-        }
+        };
     }
 
-    reg[Register.R_COND] = FL.FL_ZRO;
+    registers.reg[@intFromEnum(Register.R_COND)] = @intFromEnum(FL.FL_ZRO);
 
     const PC_START: u16 = 0x3000;
-    reg[Register.R_PC] = PC_START;
+    registers.reg[@intFromEnum(Register.R_PC)] = PC_START;
 
     var running = true;
     while (running) {
         // FETCH
-        const instr = mem_read(reg[Register.R_PC]);
-        reg[Register.R_PC] += 1;
+        const instr = memRead(registers.reg[@intFromEnum(Register.R_PC)]);
+        registers.reg[@intFromEnum(Register.R_PC)] += 1;
         const op = instr >> 12;
 
         switch (op) {
@@ -170,10 +221,10 @@ pub fn main() !void {
 
                 if (imm_flag == 1) {
                     const imm5 = signExtend(instr & 0x1F, 5);
-                    reg[r0] = reg[r1] + imm5;
+                    registers.reg[r0] = registers.reg[r1] + imm5;
                 } else {
                     const r2 = instr & 0x7;
-                    reg[r0] = reg[r1] + reg[r2];
+                    registers.reg[r0] = registers.reg[r1] + registers.reg[r2];
                 }
 
                 updateFlags(r0);
@@ -186,10 +237,10 @@ pub fn main() !void {
 
                 if (imm_flag == 1) {
                     const imm5 = signExtend(instr & 0x1F, 5);
-                    reg[r0] = reg[r1] & imm5;
+                    registers.reg[r0] = registers.reg[r1] & imm5;
                 } else {
                     const r2 = instr & 0x7;
-                    reg[r0] = reg[r1] & reg[r2];
+                    registers.reg[r0] = registers.reg[r1] & registers.reg[r2];
                 }
 
                 updateFlags(r0);
@@ -199,110 +250,110 @@ pub fn main() !void {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
 
-                reg[r0] = !reg[r1];
+                registers.reg[r0] = !registers.reg[r1];
                 updateFlags(r0);
             },
             OP.OP_BR => {
                 const cond_flag = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                const cond = (cond_flag & reg[Register.R_COND]);
+                const cond = (cond_flag & registers.reg[Register.R_COND]);
                 if (cond) {
-                    reg[Register.R_PC] += pc_offset;
+                    registers.reg[Register.R_PC] += pc_offset;
                 }
             },
             OP.OP_JMP => {
                 const r1 = (instr >> 6) & 0x7;
-                reg[Register.R_PC] = reg[r1];
+                registers.reg[Register.R_PC] = registers.reg[r1];
             },
             OP.OP_JSR => {
                 const long_flag = (instr >> 11) & 1;
-                reg[Register.R_R7] = reg[Register.R_PC];
+                registers.reg[Register.R_R7] = registers.teg[Register.R_PC];
                 if (long_flag) {
                     const pc_offset = signExtend(instr & 0x7FF, 11);
-                    reg[Register.R_PC] += pc_offset;
+                    registers.reg[Register.R_PC] += pc_offset;
                 } else {
                     const r1 = (instr >> 6) & 0x7;
-                    reg[Register.R_PC] = reg[r1];
+                    registers.reg[Register.R_PC] = registers.reg[r1];
                 }
             },
             OP.OP_LD => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                reg[r0] = mem_read(reg[Register.R_PC] + pc_offset);
+                registers.reg[r0] = memRead(registers.reg[Register.R_PC] + pc_offset);
                 updateFlags(r0);
             },
             OP.OP_LDI => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                const effective_addr = mem_read(reg[Register.R_PC] + pc_offset);
-                reg[r0] = mem_read(effective_addr);
+                const effective_addr = memRead(registers.reg[Register.R_PC] + pc_offset);
+                registers.reg[r0] = memRead(effective_addr);
                 updateFlags(r0);
             },
             OP.OP_LDR => {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
                 const offset = signExtend(instr & 0x3F, 6);
-                reg[r0] = mem_read(reg[r1] + offset);
+                registers.reg[r0] = memRead(registers.reg[r1] + offset);
                 updateFlags(r0);
             },
             OP.OP_LEA => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                reg[r0] = reg[Register.R_PC] + pc_offset;
+                registers.reg[r0] = registers.reg[Register.R_PC] + pc_offset;
                 updateFlags(r0);
             },
             OP.OP_ST => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                mem_write(reg[Register.R_PC] + pc_offset, reg[r0]);
+                memWrite(registers.reg[Register.R_PC] + pc_offset, registers.reg[r0]);
             },
             OP.OP_STI => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                const effective_addr = mem_read(reg[Register.R_PC] + pc_offset);
-                mem_write(effective_addr, reg[r0]);
+                const effective_addr = memRead(registers.reg[Register.R_PC] + pc_offset);
+                memWrite(effective_addr, registers.reg[r0]);
             },
             OP.OP_STR => {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
                 const offset = signExtend(instr & 0x3F, 6);
-                mem_write(reg[r1] + offset, reg[r0]);
+                memWrite(registers.reg[r1] + offset, registers.reg[r0]);
             },
             OP.OP_TRAP => {
-                reg[Register.R_R7] = reg[Register.R_PC];
+                registers.reg[Register.R_R7] = registers.reg[Register.R_PC];
                 const trap_vector = instr & 0xFF;
                 switch (trap_vector) {
                     trap.GETC => {
-                        reg[Register.R_R0] = try std.io.getStdIn().reader().readByte();
+                        registers.reg[Register.R_R0] = try std.io.getStdIn().reader().readByte();
                         updateFlags(Register.R_R0);
                     },
                     trap.OUT => {
-                        const output = @truncate(u8, reg[Register.R_R0]);
+                        const output: u8 = @truncate(registers.reg[Register.R_R0]);
                         std.debug.print("{c}", .{output});
                         try std.io.getStdOut().writer().flush();
                     },
                     trap.PUTS => {
-                        var c: [*]u16 = @ptrCast(memory + reg[Register.R_R0]);
-                        while (c[0] != 0) : (c += 1) {
-                            const char_value = @truncate(u8, c[0]);
+                        var char: [*]u16 = @ptrCast(memory + registers.reg[Register.R_R0]);
+                        while (char[0] != 0) : (char += 1) {
+                            const char_value: u8 = @truncate(char[0]);
                             std.debug.print("{c}", .{char_value});
                         }
                         try std.io.getStdOut().writer().flush();
                     },
                     trap.IN => {
                         std.debug.print("Type your character: ", .{});
-                        const c = try std.io.getStdIn().reader().readByte();
+                        const char = try std.io.getStdIn().reader().readByte();
                         std.debug.print("character: {c}", .{char});
                         try std.io.getStdOut().writer().flush();
-                        reg[Register.R_R0] = char;
+                        registers.reg[Register.R_R0] = char;
                         updateFlags(Register.R_R0);
                     },
                     trap.PUTSP => {
-                        var c: [*]u16 = @ptrCast(memory + reg[Register.R_R0]);
-                        while (c[0] != 0) : (c += 1) {
-                            const first_part = @truncate(u8, c[0] & 0xFF);
-                            std.debug.print("{c}", .{first_part});
-                            const second_part = @truncate(u8, c >> 8);
+                        var char: [*]u16 = @ptrCast(memory + registers.reg[Register.R_R0]);
+                        while (char[0] != 0) : (char += 1) {
+                            const first_part: u8 = @truncate(char[0] & 0xFF);
+                            std.debug.print("{char}", .{first_part});
+                            const second_part: u8 = @truncate(char >> 8);
                             if (second_part != 0) {
                                 std.debug.print("{c}", .{second_part});
                             }
@@ -324,6 +375,7 @@ pub fn main() !void {
             },
         }
     }
+    restoreInputBuffering();
 }
 
 test "simple test" {
