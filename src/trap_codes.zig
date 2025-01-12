@@ -1,4 +1,4 @@
-const TrapCodes = enum (u8) {
+pub const TrapCodes = enum (u8) {
     GETC = 0x20, // get character from keyboard, not echoed onto the terminal
     OUT = 0x21, // output a character
     PUTS = 0x22, // output a word string

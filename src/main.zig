@@ -211,7 +211,7 @@ pub fn main() !void {
         const op = instr >> 12;
 
         switch (op) {
-            OP.OP_ADD => {
+            @intFromEnum(OP.ADD) => {
                 // Destination register (DR)
                 const r0 = (instr >> 9) & 0x7;
                 // First operand (SR1)
@@ -229,7 +229,7 @@ pub fn main() !void {
 
                 updateFlags(r0);
             },
-            OP.OP_AND => {
+            @intFromEnum(OP.AND) => {
                 // AND
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
@@ -245,111 +245,111 @@ pub fn main() !void {
 
                 updateFlags(r0);
             },
-            OP.OP_NOT => {
+            @intFromEnum(OP.NOT) => {
                 // NOT
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
 
-                registers.reg[r0] = !registers.reg[r1];
+                registers.reg[r0] = ~registers.reg[r1];
                 updateFlags(r0);
             },
-            OP.OP_BR => {
+            @intFromEnum(OP.BR) => {
                 const cond_flag = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                const cond = (cond_flag & registers.reg[Register.R_COND]);
-                if (cond) {
-                    registers.reg[Register.R_PC] += pc_offset;
+                const cond = (cond_flag & registers.reg[@intFromEnum(Register.R_COND)]);
+                if (cond > 0) {
+                    registers.reg[@intFromEnum(Register.R_PC)] += pc_offset;
                 }
             },
-            OP.OP_JMP => {
+            @intFromEnum(OP.JMP) => {
                 const r1 = (instr >> 6) & 0x7;
-                registers.reg[Register.R_PC] = registers.reg[r1];
+                registers.reg[@intFromEnum(Register.R_PC)] = registers.reg[r1];
             },
-            OP.OP_JSR => {
+            @intFromEnum(OP.JSR) => {
                 const long_flag = (instr >> 11) & 1;
-                registers.reg[Register.R_R7] = registers.teg[Register.R_PC];
-                if (long_flag) {
+                registers.reg[@intFromEnum(Register.R_R7)] = registers.reg[@intFromEnum(Register.R_PC)];
+                if (long_flag != 0) {
                     const pc_offset = signExtend(instr & 0x7FF, 11);
-                    registers.reg[Register.R_PC] += pc_offset;
+                    registers.reg[@intFromEnum(Register.R_PC)] += pc_offset;
                 } else {
                     const r1 = (instr >> 6) & 0x7;
-                    registers.reg[Register.R_PC] = registers.reg[r1];
+                    registers.reg[@intFromEnum(Register.R_PC)] = registers.reg[r1];
                 }
             },
-            OP.OP_LD => {
+            @intFromEnum(OP.LD) => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                registers.reg[r0] = memRead(registers.reg[Register.R_PC] + pc_offset);
+                registers.reg[r0] = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
                 updateFlags(r0);
             },
-            OP.OP_LDI => {
+            @intFromEnum(OP.LDI) => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                const effective_addr = memRead(registers.reg[Register.R_PC] + pc_offset);
+                const effective_addr = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
                 registers.reg[r0] = memRead(effective_addr);
                 updateFlags(r0);
             },
-            OP.OP_LDR => {
+            @intFromEnum(OP.LDR) => {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
                 const offset = signExtend(instr & 0x3F, 6);
                 registers.reg[r0] = memRead(registers.reg[r1] + offset);
                 updateFlags(r0);
             },
-            OP.OP_LEA => {
+            @intFromEnum(OP.LEA) => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                registers.reg[r0] = registers.reg[Register.R_PC] + pc_offset;
+                registers.reg[r0] = registers.reg[@intFromEnum(Register.R_PC)] + pc_offset;
                 updateFlags(r0);
             },
-            OP.OP_ST => {
+            @intFromEnum(OP.ST) => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                memWrite(registers.reg[Register.R_PC] + pc_offset, registers.reg[r0]);
+                try memWrite(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset, registers.reg[r0]);
             },
-            OP.OP_STI => {
+            @intFromEnum(OP.STI) => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
-                const effective_addr = memRead(registers.reg[Register.R_PC] + pc_offset);
-                memWrite(effective_addr, registers.reg[r0]);
+                const effective_addr = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
+                try memWrite(effective_addr, registers.reg[r0]);
             },
-            OP.OP_STR => {
+            @intFromEnum(OP.STR) => {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
                 const offset = signExtend(instr & 0x3F, 6);
-                memWrite(registers.reg[r1] + offset, registers.reg[r0]);
+                try memWrite(registers.reg[r1] + offset, registers.reg[r0]);
             },
-            OP.OP_TRAP => {
-                registers.reg[Register.R_R7] = registers.reg[Register.R_PC];
-                const trap_vector = instr & 0xFF;
+            @intFromEnum(OP.TRAP) => {
+                registers.reg[@intFromEnum(Register.R_R7)] = registers.reg[@intFromEnum(Register.R_PC)];
+                const trap_vector = @as(trap, @enumFromInt(instr & 0xFF));
                 switch (trap_vector) {
                     trap.GETC => {
-                        registers.reg[Register.R_R0] = try std.io.getStdIn().reader().readByte();
-                        updateFlags(Register.R_R0);
+                        registers.reg[@intFromEnum(Register.R_R0)] = try std.io.getStdIn().reader().readByte();
+                        updateFlags(@intFromEnum(Register.R_R0));
                     },
                     trap.OUT => {
-                        const output: u8 = @truncate(registers.reg[Register.R_R0]);
+                        const output: u8 = @truncate(registers.reg[@intFromEnum(Register.R_R0)]);
                         std.debug.print("{c}", .{output});
-                        try std.io.getStdOut().writer().flush();
+                        try std.io.getStdOut().writer().writeAll("\n");
                     },
                     trap.PUTS => {
-                        var char: [*]u16 = @ptrCast(memory + registers.reg[Register.R_R0]);
+                        var char: [*]u16 = @ptrCast(memory + registers.reg[@intFromEnum(Register.R_R0)]);
                         while (char[0] != 0) : (char += 1) {
                             const char_value: u8 = @truncate(char[0]);
                             std.debug.print("{c}", .{char_value});
                         }
-                        try std.io.getStdOut().writer().flush();
+                        try std.io.getStdOut().writer().writeAll("\n");
                     },
                     trap.IN => {
                         std.debug.print("Type your character: ", .{});
                         const char = try std.io.getStdIn().reader().readByte();
                         std.debug.print("character: {c}", .{char});
                         try std.io.getStdOut().writer().flush();
-                        registers.reg[Register.R_R0] = char;
+                        registers.reg[@intFromEnum(Register.R_R0)] = char;
                         updateFlags(Register.R_R0);
                     },
                     trap.PUTSP => {
-                        var char: [*]u16 = @ptrCast(memory + registers.reg[Register.R_R0]);
+                        var char: [*]u16 = @ptrCast(memory + registers.reg[@intFromEnum(Register.R_R0)]);
                         while (char[0] != 0) : (char += 1) {
                             const first_part: u8 = @truncate(char[0] & 0xFF);
                             std.debug.print("{char}", .{first_part});
@@ -364,9 +364,6 @@ pub fn main() !void {
                         std.debug.print("HALTING\n", .{});
                         try std.io.getStdOut().writer().flush();
                         running = false;
-                    },
-                    else => {
-                        std.debug.print("unhandled trap vector\n", .{});
                     },
                 }
             },
