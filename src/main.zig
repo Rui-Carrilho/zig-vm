@@ -45,11 +45,14 @@ const SignalHandler = fn (c_int) callconv(.C) void;
 
 //signal handler
 export fn handleInterrupt(sig: c_int) callconv(.C) void {
-    try restoreInputBuffering();
+    restoreInputBuffering() catch |err| {
+        // Handle the error
+        std.debug.print("Failed to restore input buffering: {}\n", .{err});
+    };
 
     std.debug.print("\n", .{});
 
-    std.process.exit(sig);
+    std.process.exit(@intCast(sig));
 }
 
 // to set up signal handling
@@ -68,11 +71,11 @@ fn signExtend(x: u16, bit_count: u16) u16 {
 
 fn updateFlags(r: u16) void {
     if (registers.reg[r] == 0) {
-        registers.reg[Register.R_COND] = FL.FL_ZRO;
+        registers.reg[@intFromEnum(Register.R_COND)] = @intFromEnum(FL.FL_ZRO);
     } else if ((registers.reg[r] >> 15) == 1) { // Check leftmost bit for negative
-        registers.reg[Register.R_COND] = FL.FL_NEG;
+        registers.reg[@intFromEnum(Register.R_COND)] = @intFromEnum(FL.FL_NEG);
     } else {
-        registers.reg[Register.R_COND] = FL.FL_POS;
+        registers.reg[@intFromEnum(Register.R_COND)] = @intFromEnum(FL.FL_POS);
     }
 }
 
@@ -116,15 +119,15 @@ fn memWrite(address: u16, val: u16) !void {
 }
 
 fn memRead(address: u16) u16 {
-    if (address == MR.MR_KBSR) {
+    if (address == @intFromEnum(MR.MR_KBSR)) {
         if (checkKey()) {
-            memory[MR.MR_KBSR] = (1 << 15);
+            memory[@intFromEnum(MR.MR_KBSR)] = (1 << 15);
             // Read a single character from stdin
             if (std.io.getStdIn().reader().readByte()) |char| {
-                memory[MR.MR_KBDR] = char;
+                memory[@intFromEnum(MR.MR_KBDR)] = char;
             } else |_| {
                 // Handle error by clearing the keyboard status
-                memory[MR.MR_KBSR] = 0;
+                memory[@intFromEnum(MR.MR_KBSR)] = 0;
             }
         }
     }
