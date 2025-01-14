@@ -159,8 +159,12 @@ pub fn disableInputBuffering() !void {
 }
 
 fn restoreInputBuffering() !void {
-    if (kernel32.SetConsoleMode(hStdin, fdwOldMode) == 0) {
-        return error.SetConsoleModeFailed;
+    if (hStdin) |handle| {
+        if (kernel32.SetConsoleMode(handle, fdwOldMode) == 0) {
+            return error.SetConsoleModeFailed;
+        }
+    } else {
+        return error.InvalidHandle;
     }
 }
 
@@ -333,10 +337,10 @@ pub fn main() !void {
                         try std.io.getStdOut().writer().writeAll("\n");
                     },
                     trap.PUTS => {
-                        var char: [*]u16 = @ptrCast(memory + registers.reg[@intFromEnum(Register.R_R0)]);
-                        while (char[0] != 0) : (char += 1) {
-                            const char_value: u8 = @truncate(char[0]);
-                            std.debug.print("{c}", .{char_value});
+                        var addr: u16 = registers.reg[@intFromEnum(Register.R_R0)];
+                        while (memory[addr] != 0) : (addr += 1) {
+                            const char: u8 = @truncate(memory[addr]);
+                            std.debug.print("{c}", .{char});
                         }
                         try std.io.getStdOut().writer().writeAll("\n");
                     },
@@ -344,25 +348,25 @@ pub fn main() !void {
                         std.debug.print("Type your character: ", .{});
                         const char = try std.io.getStdIn().reader().readByte();
                         std.debug.print("character: {c}", .{char});
-                        try std.io.getStdOut().writer().flush();
+                        try std.io.getStdOut().writer().writeAll("\n");
                         registers.reg[@intFromEnum(Register.R_R0)] = char;
-                        updateFlags(Register.R_R0);
+                        updateFlags(@intFromEnum(Register.R_R0));
                     },
                     trap.PUTSP => {
-                        var char: [*]u16 = @ptrCast(memory + registers.reg[@intFromEnum(Register.R_R0)]);
-                        while (char[0] != 0) : (char += 1) {
-                            const first_part: u8 = @truncate(char[0] & 0xFF);
+                        var addr: u16 = registers.reg[@intFromEnum(Register.R_R0)];
+                        while (memory[addr] != 0) : (addr += 1) {
+                            const first_part: u8 = @truncate(memory[addr] & 0xFF);
                             std.debug.print("{char}", .{first_part});
-                            const second_part: u8 = @truncate(char >> 8);
+                            const second_part: u8 = @truncate(memory[addr] >> 8);
                             if (second_part != 0) {
                                 std.debug.print("{c}", .{second_part});
                             }
                         }
-                        try std.io.getStdOut().writer().flush();
+                        try std.io.getStdOut().writer().writeAll("\n");
                     },
                     trap.HALT => {
                         std.debug.print("HALTING\n", .{});
-                        try std.io.getStdOut().writer().flush();
+                        try std.io.getStdOut().writer().writeAll("\n");
                         running = false;
                     },
                 }
@@ -372,7 +376,7 @@ pub fn main() !void {
             },
         }
     }
-    restoreInputBuffering();
+    try restoreInputBuffering();
 }
 
 test "simple test" {
