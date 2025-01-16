@@ -12,6 +12,56 @@ const DWORD = windows.DWORD;
 const INVALID_HANDLE_VALUE = windows.INVALID_HANDLE_VALUE;
 const kernel32 = windows.kernel32;
 
+//courtesy of Claude, solving an error
+const INPUT_RECORD = extern struct {
+    EventType: windows.WORD,
+    Event: extern union {
+        KeyEvent: KEY_EVENT_RECORD,
+        MouseEvent: MOUSE_EVENT_RECORD,
+        WindowBufferSizeEvent: WINDOW_BUFFER_SIZE_RECORD,
+        MenuEvent: MENU_EVENT_RECORD,
+        FocusEvent: FOCUS_EVENT_RECORD,
+    },
+};
+
+const KEY_EVENT_RECORD = extern struct {
+    bKeyDown: windows.BOOL,
+    wRepeatCount: windows.WORD,
+    wVirtualKeyCode: windows.WORD,
+    wVirtualScanCode: windows.WORD,
+    UnicodeChar: windows.WCHAR,
+    dwControlKeyState: DWORD,
+};
+
+// You'll need these structs if you plan to handle other event types
+const MOUSE_EVENT_RECORD = extern struct {
+    // Add fields as needed
+};
+
+const WINDOW_BUFFER_SIZE_RECORD = extern struct {
+    // Add fields as needed
+};
+
+const MENU_EVENT_RECORD = extern struct {
+    // Add fields as needed
+};
+
+const FOCUS_EVENT_RECORD = extern struct {
+    // Add fields as needed
+};
+
+pub extern "kernel32" fn GetNumberOfConsoleInputEvents(
+    hConsoleInput: windows.HANDLE,
+    lpcNumberOfEvents: *windows.DWORD,
+) callconv(windows.WINAPI) windows.BOOL;
+
+pub extern "kernel32" fn PeekConsoleInputA(
+    hConsoleInput: windows.HANDLE,
+    lpBuffer: [*]INPUT_RECORD,
+    nLength: windows.DWORD,
+    lpNumberOfEventsRead: *windows.DWORD,
+) callconv(windows.WINAPI) windows.BOOL;
+
 // Import Windows API functions that aren't in the standard bindings
 pub extern "kernel32" fn FlushConsoleInputBuffer(hConsoleInput: windows.HANDLE) callconv(windows.WINAPI) windows.BOOL;
 
@@ -130,7 +180,9 @@ fn memRead(address: u16) u16 {
                 memory[@intFromEnum(MR.MR_KBSR)] = 0;
             }
         }
+        return memory[@intFromEnum(MR.MR_KBSR)];
     }
+    return memory[address];
 }
 
 pub fn disableInputBuffering() !void {
@@ -172,19 +224,20 @@ fn restoreInputBuffering() !void {
 }
 
 fn checkKey() bool {
-    const wait_result = kernel32.WaitForSingleObject(hStdin, 1000);
+    const wait_result = kernel32.WaitForSingleObject(@ptrCast(hStdin), 1000);
     if (wait_result == windows.WAIT_OBJECT_0) {
         var numberOfEvents: DWORD = undefined;
         var numEventsRead: DWORD = undefined;
-        var buffer: [1]windows.INPUT_RECORD = undefined;
+        var buffer: [1]INPUT_RECORD = undefined;
 
-        _ = kernel32.GetNumberofConsoleInputEvents(hStdin, &numberOfEvents);
+        _ = GetNumberOfConsoleInputEvents(@ptrCast(hStdin), &numberOfEvents);
         if (numberOfEvents > 0) {
-            if (kernel32.PeekConsoleInputA(hStdin, &buffer, 1, &numEventsRead) != 0) {
-                return buffer[0].event.KeyEvent.bKeyDown != 0;
+            if (PeekConsoleInputA(@ptrCast(hStdin), &buffer, 1, &numEventsRead) != 0) {
+                return buffer[0].Event.KeyEvent.bKeyDown != 0;
             }
         }
     }
+    return false;
 }
 
 pub fn main() !void {
@@ -359,7 +412,7 @@ pub fn main() !void {
                         var addr: u16 = registers.reg[@intFromEnum(Register.R_R0)];
                         while (memory[addr] != 0) : (addr += 1) {
                             const first_part: u8 = @truncate(memory[addr] & 0xFF);
-                            std.debug.print("{char}", .{first_part});
+                            std.debug.print("{c}", .{first_part});
                             const second_part: u8 = @truncate(memory[addr] >> 8);
                             if (second_part != 0) {
                                 std.debug.print("{c}", .{second_part});
