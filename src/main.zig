@@ -156,6 +156,7 @@ pub fn readImageFile(file: std.fs.File) !void {
 
 fn readImage(image_path: []const u8) !void {
     const file = try std.fs.cwd().openFile(image_path, .{});
+    //std.debug.print("successfully read file {}", .{file});
     defer file.close();
     try readImageFile(file);
 }
@@ -377,6 +378,7 @@ pub fn main() !void {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
                 const offset = signExtend(instr & 0x3F, 6);
+                std.debug.print("registers.reg[r1]: {}\n, offset: {}\n, registers.reg[r0]: {}\n", .{registers.reg[r1], offset, registers.reg[r0]});
                 try memWrite(registers.reg[r1] + offset, registers.reg[r0]);
             },
             @intFromEnum(OP.TRAP) => {

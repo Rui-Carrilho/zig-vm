@@ -36,7 +36,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    //exe.linkLibC();
+    exe.linkLibC();
+    exe.want_lto = false;
+
+    //exe.setTarget(.{
+    //    .cpu_arch = .x86_64,
+    //    .os_tag = .windows,
+    //    .abi = .gnu,
+    //});
+
+    exe.addIncludePath(.{ .path = "D:/Users/ruica/mingw64/x86_64-w64-mingw32/include" });
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
