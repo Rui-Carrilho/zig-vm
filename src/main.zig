@@ -105,6 +105,14 @@ export fn handleInterrupt(sig: c_int) callconv(.C) void {
     std.process.exit(@intCast(sig));
 }
 
+// Add this with your other extern declarations
+pub extern "kernel32" fn ReadConsoleInputA(
+    hConsoleInput: windows.HANDLE,
+    lpBuffer: [*]INPUT_RECORD,
+    nLength: windows.DWORD,
+    lpNumberOfEventsRead: *windows.DWORD,
+) callconv(windows.WINAPI) windows.BOOL;
+
 // to set up signal handling
 fn setupSignalHandler() void {
     //std.debug.print("trying to get a signal here", .{});
@@ -247,13 +255,13 @@ fn checkKey() bool {
                     if (buffer[0].Event.KeyEvent.bKeyDown != 0) {
                         // Clear the event from the input buffer
                         var dummy: DWORD = undefined;
-                        _ = kernel32.ReadConsoleInputA(handle, &buffer, 1, &dummy);
+                        _ = ReadConsoleInputA(handle, &buffer, 1, &dummy);
                         return true;
                     }
                 }
                 // Clear non-keyboard events
                 var dummy: DWORD = undefined;
-                _ = kernel32.ReadConsoleInputA(handle, &buffer, 1, &dummy);
+                _ = ReadConsoleInputA(handle, &buffer, 1, &dummy);
             }
         }
     }
