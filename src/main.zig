@@ -111,13 +111,11 @@ fn setupSignalHandler() void {
 }
 
 fn signExtend(x: u16, bit_count: u16) u16 {
-    // Check if the highest bit in the bit_count range is set (sign bit)
-    var val = x;  
-    if (((val >> @intCast(bit_count - 1)) & 1) == 1) {
+    if (((x >> @intCast(bit_count - 1)) & 1) == 1) {
         // If sign bit is set, fill all higher bits with 1s
-        val |= (0xFFFF << @intCast(bit_count));
+        return x | (@as(u16, 0xFFFF) << @intCast(bit_count));
     }
-    return val;
+    return x;
 }
 
 fn updateFlags(r: u16) void {
@@ -282,7 +280,7 @@ pub fn main() !void {
                 const imm_flag = (instr >> 5) & 0x1;
 
                 if (imm_flag == 1) {
-                    const imm5 = signExtend(instr & 0x1F, 5);
+                    const imm5 = instr & 0x1F;
                     registers.reg[r0] = registers.reg[r1] + imm5;
                 } else {
                     const r2 = instr & 0x7;
@@ -378,8 +376,8 @@ pub fn main() !void {
             @intFromEnum(OP.STR) => {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
-                const offset = signExtend(instr & 0x3F, 6);
-                std.debug.print("registers.reg[r1]: {},\noffset: {},\ninstr: {},\ninstr & 0x3F: {},\nregisters.reg[r0]: {}\n", .{registers.reg[r1], offset, instr, instr & 0x3F, registers.reg[r0]});
+                const offset = (instr & 0x3F);
+                std.debug.print("registers.reg[r1]: {},\noffset: {},\ninstr: {},\ninstr & 0x3F: {},\nregisters.reg[r0]: {}\n", .{ registers.reg[r1], offset, instr, instr & 0x3F, registers.reg[r0] });
                 try memWrite(registers.reg[r1] + offset, registers.reg[r0]);
             },
             @intFromEnum(OP.TRAP) => {
