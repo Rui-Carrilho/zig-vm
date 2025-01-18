@@ -112,11 +112,12 @@ fn setupSignalHandler() void {
 
 fn signExtend(x: u16, bit_count: u16) u16 {
     // Check if the highest bit in the bit_count range is set (sign bit)
-    if (((x >> @intCast(bit_count - 1)) & 1) == 1) {
+    var val = x;  
+    if (((val >> @intCast(bit_count - 1)) & 1) == 1) {
         // If sign bit is set, fill all higher bits with 1s
-        return x | (@as(u16, 0xFFFF) << @intCast(bit_count));
+        val |= (0xFFFF << @intCast(bit_count));
     }
-    return x;
+    return val;
 }
 
 fn updateFlags(r: u16) void {
@@ -378,7 +379,7 @@ pub fn main() !void {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
                 const offset = signExtend(instr & 0x3F, 6);
-                std.debug.print("registers.reg[r1]: {}\n, offset: {}\n, registers.reg[r0]: {}\n", .{registers.reg[r1], offset, registers.reg[r0]});
+                std.debug.print("registers.reg[r1]: {},\noffset: {},\ninstr: {},\ninstr & 0x3F: {},\nregisters.reg[r0]: {}\n", .{registers.reg[r1], offset, instr, instr & 0x3F, registers.reg[r0]});
                 try memWrite(registers.reg[r1] + offset, registers.reg[r0]);
             },
             @intFromEnum(OP.TRAP) => {
