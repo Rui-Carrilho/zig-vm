@@ -107,7 +107,9 @@ export fn handleInterrupt(sig: c_int) callconv(.C) void {
 
 // to set up signal handling
 fn setupSignalHandler() void {
+    //std.debug.print("trying to get a signal here", .{});
     _ = c.signal(c.SIGINT, handleInterrupt);
+    //std.debug.print("launched the function", .{});
 }
 
 fn signExtend(x: u16, bit_count: u16) u16 {
@@ -267,7 +269,7 @@ pub fn main() !void {
     while (running) {
         // FETCH
         const instr = memRead(registers.reg[@intFromEnum(Register.R_PC)]);
-        //std.debug.print("registers.reg[@intFromEnum(Register.R_PC)]: {}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
+        std.debug.print("registers.reg[@intFromEnum(Register.R_PC)]: {}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
         registers.reg[@intFromEnum(Register.R_PC)] += 1;
         const op = instr >> 12;
 
@@ -289,7 +291,7 @@ pub fn main() !void {
                 }
 
                 updateFlags(r0);
-                break;
+                //break;
             },
             @intFromEnum(OP.AND) => {
                 // AND
@@ -306,7 +308,7 @@ pub fn main() !void {
                 }
 
                 updateFlags(r0);
-                break;
+                //break;
             },
             @intFromEnum(OP.NOT) => {
                 // NOT
@@ -315,7 +317,7 @@ pub fn main() !void {
 
                 registers.reg[r0] = ~registers.reg[r1];
                 updateFlags(r0);
-                break;
+                //break;
             },
             @intFromEnum(OP.BR) => {
                 const cond_flag = (instr >> 9) & 0x7;
@@ -324,12 +326,12 @@ pub fn main() !void {
                 if (cond > 0) {
                     registers.reg[@intFromEnum(Register.R_PC)] += pc_offset;
                 }
-                break;
+                //break;
             },
             @intFromEnum(OP.JMP) => {
                 const r1 = (instr >> 6) & 0x7;
                 registers.reg[@intFromEnum(Register.R_PC)] = registers.reg[r1];
-                break;
+                //break;
             },
             @intFromEnum(OP.JSR) => {
                 const long_flag = (instr >> 11) & 1;
@@ -341,22 +343,22 @@ pub fn main() !void {
                     const r1 = (instr >> 6) & 0x7;
                     registers.reg[@intFromEnum(Register.R_PC)] = registers.reg[r1];
                 }
-                break;
+                //break;
             },
             @intFromEnum(OP.LD) => {
                 const r0 = (instr >> 9) & 0x7;
-                const pc_offset = signExtend(instr & 0x1FF, 9);
+                const pc_offset = (instr & 0x1FF);
                 registers.reg[r0] = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
                 updateFlags(r0);
-                break;
+                //break;
             },
             @intFromEnum(OP.LDI) => {
                 const r0 = (instr >> 9) & 0x7;
-                const pc_offset = signExtend(instr & 0x1FF, 9);
+                const pc_offset = (instr & 0x1FF);
                 const effective_addr = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
                 registers.reg[r0] = memRead(effective_addr);
                 updateFlags(r0);
-                break;
+                //break;
             },
             @intFromEnum(OP.LDR) => {
                 const r0 = (instr >> 9) & 0x7;
@@ -364,35 +366,35 @@ pub fn main() !void {
                 const offset = signExtend(instr & 0x3F, 6);
                 registers.reg[r0] = memRead(registers.reg[r1] + offset);
                 updateFlags(r0);
-                break;
+                //break;
             },
             @intFromEnum(OP.LEA) => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
                 registers.reg[r0] = registers.reg[@intFromEnum(Register.R_PC)] + pc_offset;
                 updateFlags(r0);
-                break;
+                //break;
             },
             @intFromEnum(OP.ST) => {
                 const r0 = (instr >> 9) & 0x7;
-                const pc_offset = signExtend(instr & 0x1FF, 9);
+                const pc_offset = (instr & 0x1FF);
                 try memWrite(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset, registers.reg[r0]);
-                break;
+                //break;
             },
             @intFromEnum(OP.STI) => {
                 const r0 = (instr >> 9) & 0x7;
                 const pc_offset = signExtend(instr & 0x1FF, 9);
                 const effective_addr = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
                 try memWrite(effective_addr, registers.reg[r0]);
-                break;
+                //break;
             },
             @intFromEnum(OP.STR) => {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
                 const offset = (instr & 0x3F);
-                std.debug.print("registers.reg[r1]: {},\noffset: {},\ninstr: {},\ninstr & 0x3F: {},\nregisters.reg[r0]: {}\n", .{ registers.reg[r1], offset, instr, instr & 0x3F, registers.reg[r0] });
+                //std.debug.print("registers.reg[r1]: {},\noffset: {},\ninstr: {},\ninstr & 0x3F: {},\nregisters.reg[r0]: {}\n", .{ registers.reg[r1], offset, instr, instr & 0x3F, registers.reg[r0] });
                 try memWrite(registers.reg[r1] + offset, registers.reg[r0]);
-                break;
+                //break;
             },
             @intFromEnum(OP.TRAP) => {
                 registers.reg[@intFromEnum(Register.R_R7)] = registers.reg[@intFromEnum(Register.R_PC)];
@@ -441,7 +443,7 @@ pub fn main() !void {
                         running = false;
                     },
                 }
-                break;
+                //break;
             },
             else => {
                 break;
@@ -449,11 +451,4 @@ pub fn main() !void {
         }
     }
     try restoreInputBuffering();
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
 }
