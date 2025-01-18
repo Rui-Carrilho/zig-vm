@@ -174,15 +174,20 @@ fn memRead(address: u16) u16 {
     if (address == @intFromEnum(MR.MR_KBSR)) {
         if (checkKey()) {
             memory[@intFromEnum(MR.MR_KBSR)] = (1 << 15);
-            // Read a single character from stdin
-            if (std.io.getStdIn().reader().readByte()) |char| {
+            // Read a single character
+            const stdin = std.io.getStdIn();
+            if (stdin.reader().readByte()) |char| {
                 memory[@intFromEnum(MR.MR_KBDR)] = char;
             } else |_| {
-                // Handle error by clearing the keyboard status
                 memory[@intFromEnum(MR.MR_KBSR)] = 0;
             }
+        } else {
+            memory[@intFromEnum(MR.MR_KBSR)] = 0;
         }
         return memory[@intFromEnum(MR.MR_KBSR)];
+    } else if (address == @intFromEnum(MR.MR_KBDR)) {
+        // Clear the ready flag after reading KBDR
+        memory[@intFromEnum(MR.MR_KBSR)] = 0;
     }
     return memory[address];
 }
@@ -226,16 +231,29 @@ fn restoreInputBuffering() !void {
 }
 
 fn checkKey() bool {
-    const wait_result = kernel32.WaitForSingleObject(@ptrCast(hStdin), 1000);
-    if (wait_result == windows.WAIT_OBJECT_0) {
+    if (hStdin) |handle| {
         var numberOfEvents: DWORD = undefined;
         var numEventsRead: DWORD = undefined;
         var buffer: [1]INPUT_RECORD = undefined;
 
-        _ = GetNumberOfConsoleInputEvents(@ptrCast(hStdin), &numberOfEvents);
+        if (GetNumberOfConsoleInputEvents(handle, &numberOfEvents) == 0) {
+            return false;
+        }
+
         if (numberOfEvents > 0) {
-            if (PeekConsoleInputA(@ptrCast(hStdin), &buffer, 1, &numEventsRead) != 0) {
-                return buffer[0].Event.KeyEvent.bKeyDown != 0;
+            if (PeekConsoleInputA(handle, &buffer, 1, &numEventsRead) != 0) {
+                // Only return true for actual key down events
+                if (buffer[0].EventType == 0x0001) { // KEY_EVENT
+                    if (buffer[0].Event.KeyEvent.bKeyDown != 0) {
+                        // Clear the event from the input buffer
+                        var dummy: DWORD = undefined;
+                        _ = kernel32.ReadConsoleInputA(handle, &buffer, 1, &dummy);
+                        return true;
+                    }
+                }
+                // Clear non-keyboard events
+                var dummy: DWORD = undefined;
+                _ = kernel32.ReadConsoleInputA(handle, &buffer, 1, &dummy);
             }
         }
     }
