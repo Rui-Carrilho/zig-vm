@@ -245,23 +245,27 @@ fn checkKey() bool {
         var buffer: [1]INPUT_RECORD = undefined;
 
         if (GetNumberOfConsoleInputEvents(handle, &numberOfEvents) == 0) {
+            std.debug.print("Failed to get number of events\n", .{});
             return false;
         }
 
         if (numberOfEvents > 0) {
             if (PeekConsoleInputA(handle, &buffer, 1, &numEventsRead) != 0) {
+                std.debug.print("Event type: {}, Key down: {}\n", .{ buffer[0].EventType, buffer[0].Event.KeyEvent.bKeyDown });
                 // Only return true for actual key down events
                 if (buffer[0].EventType == 0x0001) { // KEY_EVENT
                     if (buffer[0].Event.KeyEvent.bKeyDown != 0) {
                         // Clear the event from the input buffer
                         var dummy: DWORD = undefined;
                         _ = ReadConsoleInputA(handle, &buffer, 1, &dummy);
+                        std.debug.print("Key event detected and cleared\n", .{});
                         return true;
                     }
                 }
                 // Clear non-keyboard events
                 var dummy: DWORD = undefined;
                 _ = ReadConsoleInputA(handle, &buffer, 1, &dummy);
+                std.debug.print("Non-keyboard event cleared\n", .{});
             }
         }
     }
@@ -293,15 +297,19 @@ pub fn main() !void {
 
     var running = true;
     while (running) {
+        // Save current PC before incrementing
+        const current_pc = registers.reg[@intFromEnum(Register.R_PC)];
         // FETCH
         const instr = memRead(registers.reg[@intFromEnum(Register.R_PC)]);
-        std.debug.print("registers.reg[@intFromEnum(Register.R_PC)]: {}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
+        //std.debug.print("registers.reg[@intFromEnum(Register.R_PC)]: {}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
+        //std.debug.print("PC: {X:0>4}, Instruction: {X:0>4}\n", .{ registers.reg[@intFromEnum(Register.R_PC)], instr });
         registers.reg[@intFromEnum(Register.R_PC)] += 1;
         const op = instr >> 12;
 
         switch (op) {
             @intFromEnum(OP.ADD) => {
                 // Destination register (DR)
+
                 const r0 = (instr >> 9) & 0x7;
                 // First operand (SR1)
                 const r1 = (instr >> 6) & 0x7;
@@ -347,7 +355,7 @@ pub fn main() !void {
             },
             @intFromEnum(OP.BR) => {
                 const cond_flag = (instr >> 9) & 0x7;
-                const pc_offset = instr & 0x1FF;
+                const pc_offset = (instr & 0x1FF);
                 const cond = (cond_flag & registers.reg[@intFromEnum(Register.R_COND)]);
                 if (cond > 0) {
                     registers.reg[@intFromEnum(Register.R_PC)] += pc_offset;
@@ -423,12 +431,16 @@ pub fn main() !void {
                 //break;
             },
             @intFromEnum(OP.TRAP) => {
-                registers.reg[@intFromEnum(Register.R_R7)] = registers.reg[@intFromEnum(Register.R_PC)];
+                registers.reg[@intFromEnum(Register.R_R7)] = current_pc;
                 const trap_vector = @as(trap, @enumFromInt(instr & 0xFF));
                 switch (trap_vector) {
                     trap.GETC => {
+                        std.debug.print("GETC trap called\n", .{});
                         registers.reg[@intFromEnum(Register.R_R0)] = try std.io.getStdIn().reader().readByte();
+                        std.debug.print("Got byte: {}, PC before: {X:0>4}, R7: {X:0>4}\n", .{ registers.reg[@intFromEnum(Register.R_R0)], registers.reg[@intFromEnum(Register.R_PC)], registers.reg[@intFromEnum(Register.R_R7)] });
                         updateFlags(@intFromEnum(Register.R_R0));
+                        //registers.reg[@intFromEnum(Register.R_PC)] = registers.reg[@intFromEnum(Register.R_R7)];
+                        //std.debug.print("PC after: {X:0>4}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
                     },
                     trap.OUT => {
                         const output: u8 = @truncate(registers.reg[@intFromEnum(Register.R_R0)]);
