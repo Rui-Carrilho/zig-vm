@@ -302,7 +302,7 @@ pub fn main() !void {
         // FETCH
         const instr = memRead(registers.reg[@intFromEnum(Register.R_PC)]);
         //std.debug.print("registers.reg[@intFromEnum(Register.R_PC)]: {}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
-        //std.debug.print("PC: {X:0>4}, Instruction: {X:0>4}\n", .{ registers.reg[@intFromEnum(Register.R_PC)], instr });
+        std.debug.print("PC: {X:0>4}, Instruction: {X:0>4}\n", .{ registers.reg[@intFromEnum(Register.R_PC)], instr });
         registers.reg[@intFromEnum(Register.R_PC)] += 1;
         const op = instr >> 12;
 
@@ -354,11 +354,14 @@ pub fn main() !void {
                 //break;
             },
             @intFromEnum(OP.BR) => {
+                std.debug.print("calling branch op here\n", .{});
                 const cond_flag = (instr >> 9) & 0x7;
                 const pc_offset = (instr & 0x1FF);
                 const cond = (cond_flag & registers.reg[@intFromEnum(Register.R_COND)]);
+                std.debug.print("BR: cond_flag={}, pc_offset={}, cond={}, current_PC={X:0>4}\n", .{ cond_flag, pc_offset, cond, registers.reg[@intFromEnum(Register.R_PC)] });
                 if (cond > 0) {
                     registers.reg[@intFromEnum(Register.R_PC)] += pc_offset;
+                    std.debug.print("Branch taken, new PC={X:0>4}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
                 }
                 //break;
             },
