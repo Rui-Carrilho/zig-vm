@@ -251,14 +251,14 @@ fn checkKey() bool {
 
         if (numberOfEvents > 0) {
             if (PeekConsoleInputA(handle, &buffer, 1, &numEventsRead) != 0) {
-                std.debug.print("Event type: {}, Key down: {}\n", .{ buffer[0].EventType, buffer[0].Event.KeyEvent.bKeyDown });
+                //std.debug.print("Event type: {}, Key down: {}\n", .{ buffer[0].EventType, buffer[0].Event.KeyEvent.bKeyDown });
                 // Only return true for actual key down events
                 if (buffer[0].EventType == 0x0001) { // KEY_EVENT
                     if (buffer[0].Event.KeyEvent.bKeyDown != 0) {
                         // Clear the event from the input buffer
                         var dummy: DWORD = undefined;
                         _ = ReadConsoleInputA(handle, &buffer, 1, &dummy);
-                        std.debug.print("Key event detected and cleared\n", .{});
+                        //std.debug.print("Key event detected and cleared\n", .{});
                         return true;
                     }
                 }
@@ -295,16 +295,59 @@ pub fn main() !void {
     const PC_START: u16 = 0x3000;
     registers.reg[@intFromEnum(Register.R_PC)] = PC_START;
 
+    var pc1: u16 = undefined;
+    var pc2: u16 = undefined;
+    var pc3: u16 = undefined;
+
+    var instr1: u16 = undefined;
+    var instr2: u16 = undefined;
+    var instr3: u16 = undefined;
+
     var running = true;
+
+    for (memory[12800..12929]) |memAddr| {
+        std.debug.print(": {X:0>4}", .{memAddr});
+    }
+
     while (running) {
         // Save current PC before incrementing
         const current_pc = registers.reg[@intFromEnum(Register.R_PC)];
         // FETCH
         const instr = memRead(registers.reg[@intFromEnum(Register.R_PC)]);
         //std.debug.print("registers.reg[@intFromEnum(Register.R_PC)]: {}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
-        std.debug.print("PC: {X:0>4}, Instruction: {X:0>4}\n", .{ registers.reg[@intFromEnum(Register.R_PC)], instr });
+        //std.debug.print("PC: {X:0>4}, Instruction: {X:0>4}\n", .{ registers.reg[@intFromEnum(Register.R_PC)], instr });
         registers.reg[@intFromEnum(Register.R_PC)] += 1;
         const op = instr >> 12;
+        //std.debug.print("opcode: {x:0>4}\n", .{op});
+
+        pc3 = pc2;
+        pc2 = pc1;
+        pc1 = current_pc;
+
+        instr3 = instr2;
+        instr2 = instr1;
+        instr1 = instr;
+
+        if (instr == 0) {
+            for (memory[12800..12929]) |memAddr| {
+                std.debug.print(": {X:0>4}", .{memAddr});
+            }
+            std.debug.print("\n", .{});
+            std.debug.print("pc1: {}\n", .{pc1});
+            std.debug.print("pc2: {}\n", .{pc2});
+            std.debug.print("pc3: {}\n", .{pc3});
+            std.debug.print("instr1: {}\n", .{instr1});
+            std.debug.print("instr2: {}\n", .{instr2});
+            std.debug.print("instr3: {}\n", .{instr3});
+            for (registers.reg, 0..) |val, register| {
+                std.debug.print("registers.reg[{}]: {}\n", .{ register, val });
+            }
+            std.debug.print("registers.reg[@intFromEnum(Register.R_PC)]: {}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
+            std.debug.print("PC: {X:0>4}, Instruction: {X:0>4}\n", .{ registers.reg[@intFromEnum(Register.R_PC)], instr });
+            std.debug.print("opcode: {x:0>4}\n", .{op});
+            std.debug.print("we ran into zeros", .{});
+            break;
+        }
 
         switch (op) {
             @intFromEnum(OP.ADD) => {
@@ -317,11 +360,11 @@ pub fn main() !void {
                 const imm_flag = (instr >> 5) & 0x1;
 
                 if (imm_flag == 1) {
-                    const imm5 = instr & 0x1F;
-                    registers.reg[r0] = registers.reg[r1] + imm5;
+                    const imm5 = signExtend(instr & 0x1F, 5);
+                    registers.reg[r0] = registers.reg[r1] +% imm5;
                 } else {
                     const r2 = instr & 0x7;
-                    registers.reg[r0] = registers.reg[r1] + registers.reg[r2];
+                    registers.reg[r0] = registers.reg[r1] +% registers.reg[r2];
                 }
 
                 updateFlags(r0);
@@ -354,19 +397,23 @@ pub fn main() !void {
                 //break;
             },
             @intFromEnum(OP.BR) => {
-                std.debug.print("calling branch op here\n", .{});
+                //std.debug.print("calling branch op here\n", .{});
+                const pc_offset = signExtend(instr & 0x1FF, 9);
                 const cond_flag = (instr >> 9) & 0x7;
-                const pc_offset = (instr & 0x1FF);
                 const cond = (cond_flag & registers.reg[@intFromEnum(Register.R_COND)]);
-                std.debug.print("BR: cond_flag={}, pc_offset={}, cond={}, current_PC={X:0>4}\n", .{ cond_flag, pc_offset, cond, registers.reg[@intFromEnum(Register.R_PC)] });
+                //std.debug.print("BR: cond_flag={}, pc_offset={}, cond={}, current_PC={X:0>4}\n", .{ cond_flag, pc_offset, cond, registers.reg[@intFromEnum(Register.R_PC)] });
                 if (cond > 0) {
-                    registers.reg[@intFromEnum(Register.R_PC)] += pc_offset;
-                    std.debug.print("Branch taken, new PC={X:0>4}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
+                    registers.reg[@intFromEnum(Register.R_PC)] +%= pc_offset;
+                    //std.debug.print("Branch taken, new PC={X:0>4}\n", .{registers.reg[@intFromEnum(Register.R_PC)]});
                 }
                 //break;
             },
             @intFromEnum(OP.JMP) => {
                 const r1 = (instr >> 6) & 0x7;
+                if (r1 == 0x7) {
+                    std.debug.print("registers.reg[r1]: {}\n", .{registers.reg[r1]});
+                }
+
                 registers.reg[@intFromEnum(Register.R_PC)] = registers.reg[r1];
                 //break;
             },
@@ -375,7 +422,7 @@ pub fn main() !void {
                 registers.reg[@intFromEnum(Register.R_R7)] = registers.reg[@intFromEnum(Register.R_PC)];
                 if (long_flag != 0) {
                     const pc_offset = signExtend(instr & 0x7FF, 11);
-                    registers.reg[@intFromEnum(Register.R_PC)] += pc_offset;
+                    registers.reg[@intFromEnum(Register.R_PC)] +%= pc_offset;
                 } else {
                     const r1 = (instr >> 6) & 0x7;
                     registers.reg[@intFromEnum(Register.R_PC)] = registers.reg[r1];
@@ -384,15 +431,15 @@ pub fn main() !void {
             },
             @intFromEnum(OP.LD) => {
                 const r0 = (instr >> 9) & 0x7;
-                const pc_offset = (instr & 0x1FF);
-                registers.reg[r0] = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                registers.reg[r0] = memRead(registers.reg[@intFromEnum(Register.R_PC)] +% pc_offset);
                 updateFlags(r0);
                 //break;
             },
             @intFromEnum(OP.LDI) => {
                 const r0 = (instr >> 9) & 0x7;
-                const pc_offset = (instr & 0x1FF);
-                const effective_addr = memRead(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset);
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                const effective_addr = memRead(registers.reg[@intFromEnum(Register.R_PC)] +% pc_offset);
                 registers.reg[r0] = memRead(effective_addr);
                 updateFlags(r0);
                 //break;
@@ -414,8 +461,8 @@ pub fn main() !void {
             },
             @intFromEnum(OP.ST) => {
                 const r0 = (instr >> 9) & 0x7;
-                const pc_offset = (instr & 0x1FF);
-                try memWrite(registers.reg[@intFromEnum(Register.R_PC)] + pc_offset, registers.reg[r0]);
+                const pc_offset = signExtend(instr & 0x1FF, 9);
+                try memWrite(registers.reg[@intFromEnum(Register.R_PC)] +% pc_offset, registers.reg[r0]);
                 //break;
             },
             @intFromEnum(OP.STI) => {
@@ -428,9 +475,9 @@ pub fn main() !void {
             @intFromEnum(OP.STR) => {
                 const r0 = (instr >> 9) & 0x7;
                 const r1 = (instr >> 6) & 0x7;
-                const offset = (instr & 0x3F);
+                const offset = signExtend(instr & 0x3F, 6);
                 //std.debug.print("registers.reg[r1]: {},\noffset: {},\ninstr: {},\ninstr & 0x3F: {},\nregisters.reg[r0]: {}\n", .{ registers.reg[r1], offset, instr, instr & 0x3F, registers.reg[r0] });
-                try memWrite(registers.reg[r1] + offset, registers.reg[r0]);
+                try memWrite(registers.reg[r1] +% offset, registers.reg[r0]);
                 //break;
             },
             @intFromEnum(OP.TRAP) => {
@@ -448,7 +495,7 @@ pub fn main() !void {
                     trap.OUT => {
                         const output: u8 = @truncate(registers.reg[@intFromEnum(Register.R_R0)]);
                         std.debug.print("{c}", .{output});
-                        try std.io.getStdOut().writer().writeAll("\n");
+                        //try std.io.getStdOut().writer().writeAll("\n");
                     },
                     trap.PUTS => {
                         var addr: u16 = registers.reg[@intFromEnum(Register.R_R0)];
@@ -456,13 +503,13 @@ pub fn main() !void {
                             const char: u8 = @truncate(memory[addr]);
                             std.debug.print("{c}", .{char});
                         }
-                        try std.io.getStdOut().writer().writeAll("\n");
+                        //try std.io.getStdOut().writer().writeAll("\n");
                     },
                     trap.IN => {
                         std.debug.print("Type your character: ", .{});
                         const char = try std.io.getStdIn().reader().readByte();
                         std.debug.print("character: {c}", .{char});
-                        try std.io.getStdOut().writer().writeAll("\n");
+                        //try std.io.getStdOut().writer().writeAll("\n");
                         registers.reg[@intFromEnum(Register.R_R0)] = char;
                         updateFlags(@intFromEnum(Register.R_R0));
                     },
@@ -476,11 +523,11 @@ pub fn main() !void {
                                 std.debug.print("{c}", .{second_part});
                             }
                         }
-                        try std.io.getStdOut().writer().writeAll("\n");
+                        //try std.io.getStdOut().writer().writeAll("\n");
                     },
                     trap.HALT => {
                         std.debug.print("HALTING\n", .{});
-                        try std.io.getStdOut().writer().writeAll("\n");
+                        //try std.io.getStdOut().writer().writeAll("\n");
                         running = false;
                     },
                 }
